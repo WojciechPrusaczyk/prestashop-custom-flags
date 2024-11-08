@@ -60,13 +60,16 @@ class CustomFlags extends Module
     private function createTables()
     {
         $customFlags = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'custom_flags` (
-                `flag_id` INT(11) NOT NULL AUTO_INCREMENT,
-                `name` VARCHAR(255) NOT NULL,
-                `display_text` VARCHAR(255) NOT NULL,
-                `type` VARCHAR(255) NOT NULL,
-                `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (`flag_id`), UNIQUE (`name`)
-            ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8mb4;';
+            `flag_id` INT(11) NOT NULL AUTO_INCREMENT,
+            `name` VARCHAR(255) NOT NULL,
+            `display_text` VARCHAR(255) NOT NULL,
+            `type` VARCHAR(255) NOT NULL,
+            `trigger_type` VARCHAR(255) DEFAULT NULL,
+            `trigger_operator` ENUM(">", "<") DEFAULT NULL,
+            `trigger_value` INT(11) DEFAULT NULL,
+            `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`flag_id`), UNIQUE (`name`)
+        ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8mb4;';
 
         $productsFlags = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'products_flags` (
                 `product_id` INT(11) NOT NULL,
@@ -133,6 +136,17 @@ class CustomFlags extends Module
             ['id' => 'out_of_stock', 'name' => 'Out of stock'],
         ];
 
+        // Triggery
+        $triggerTypes = [
+            ['id' => 'none', 'name' => 'none'],
+            ['id' => 'quantity', 'name' => 'Quantity']
+        ];
+        $triggerOperators = [
+            ['id' => '>', 'name' => 'greater than'],
+            ['id' => '<', 'name' => 'less than']
+        ];
+
+
         $helper = new HelperForm();
         $editForm = null;
         $outputDeleteForm = null;
@@ -166,6 +180,31 @@ class CustomFlags extends Module
                             'id' => 'id',
                             'name' => 'name',
                         ]
+                    ],
+                    [
+                        'type' => 'select',
+                        'label' => $this->l('Trigger type'),
+                        'name' => 'flag_trigger_type',
+                        'options' => [
+                            'query' => $triggerTypes,
+                            'id' => 'id',
+                            'name' => 'name',
+                        ]
+                    ],
+                    [
+                        'type' => 'select',
+                        'label' => $this->l('Operator'),
+                        'name' => 'flag_trigger_operator',
+                        'options' => [
+                            'query' => $triggerOperators,
+                            'id' => 'id',
+                            'name' => 'name',
+                        ]
+                    ],
+                    [
+                        'type' => 'text',
+                        'label' => $this->l('Trigger value'),
+                        'name' => 'flag_trigger_value',
                     ],
                 ],
                 'submit' => [
@@ -216,6 +255,31 @@ class CustomFlags extends Module
                                 'name' => 'name',
                             ]
                         ],
+                        [
+                            'type' => 'select',
+                            'label' => $this->l('Trigger type'),
+                            'name' => 'edit_flag_trigger_type',
+                            'options' => [
+                                'query' => $triggerTypes,
+                                'id' => 'id',
+                                'name' => 'name',
+                            ]
+                        ],
+                        [
+                            'type' => 'select',
+                            'label' => $this->l('Operator'),
+                            'name' => 'edit_flag_trigger_operator',
+                            'options' => [
+                                'query' => $triggerOperators,
+                                'id' => 'id',
+                                'name' => 'name',
+                            ]
+                        ],
+                        [
+                            'type' => 'text',
+                            'label' => $this->l('Trigger value'),
+                            'name' => 'edit_flag_trigger_value',
+                        ],
                     ],
                     'submit' => [
                         'title' => $this->l('Save Changes'),
@@ -255,6 +319,9 @@ class CustomFlags extends Module
             $helper->fields_value['edit_flag_name'] = Tools::getValue('edit_flag_name');
             $helper->fields_value['edit_flag_display_text'] = Tools::getValue('edit_flag_display_text');
             $helper->fields_value['edit_flag_type'] = Tools::getValue('edit_flag_type');
+            $helper->fields_value['edit_flag_trigger_type'] = Tools::getValue('edit_flag_trigger_type');
+            $helper->fields_value['edit_flag_trigger_operator'] = Tools::getValue('edit_flag_trigger_operator');
+            $helper->fields_value['edit_flag_trigger_value'] = Tools::getValue('edit_flag_trigger_value');
             $editForm = $helper->generateForm([$editForm]);
 
             // Wartość pola usuwania flagi
@@ -266,6 +333,9 @@ class CustomFlags extends Module
         $helper->fields_value['flag_name'] = Tools::getValue('flag_name');
         $helper->fields_value['flag_display_text'] = Tools::getValue('flag_display_text');
         $helper->fields_value['flag_type'] = Tools::getValue('flag_type');
+        $helper->fields_value['flag_trigger_type'] = Tools::getValue('flag_trigger_type');
+        $helper->fields_value['flag_trigger_operator'] = Tools::getValue('flag_trigger_operator');
+        $helper->fields_value['flag_trigger_value'] = Tools::getValue('flag_trigger_value');
         $outputForm = $helper->generateForm([$form]);
 
         return $outputForm . $editForm . $outputDeleteForm;
@@ -319,22 +389,32 @@ class CustomFlags extends Module
             $productId = (int)$params['product']['id_product'];
             $flags = $this->getFlags($productId);
 
-            // Jeśli są flagi przypisane do danego produktu
             if (!empty($flags)) {
-
-                // Pobranie listy flag danego produktu, z odpowiednimi wartościami
                 $customFlags = Db::getInstance()->executeS(
-                    'SELECT name, display_text, type
+                    'SELECT name, display_text, type, trigger_type, trigger_operator, trigger_value
                  FROM `' . _DB_PREFIX_ . 'custom_flags`
                  WHERE flag_id IN (' . implode(',', array_map('intval', $flags)) . ')'
                 );
 
-                // Dodawanie customowych flag do listy flag danego produktu
                 foreach ($customFlags as $flag) {
-                    $params['flags'][] = [
-                        'type' => $flag['type'],
-                        'label' => $flag['display_text'],
-                    ];
+
+                    // Sprawdzanie warunku przyznania flagi na podstawie triggera
+                    if (!is_null($flag['trigger_type']) && $flag['trigger_type'] !== 'none' && !is_null($flag['trigger_operator']) && !is_null($flag['trigger_value'])) {
+                        $quantity = StockAvailable::getQuantityAvailableByProduct($productId);
+                        if (($flag['trigger_operator'] === '>' && $quantity > (int)$flag['trigger_value']) ||
+                            ($flag['trigger_operator'] === '<' && $quantity < (int)$flag['trigger_value'])) {
+                            $params['flags'][] = [
+                                'type' => $flag['type'],
+                                'label' => $flag['display_text']
+                            ];
+                        }
+                    } else {
+                        // Jeśli dana flaga nie ma triggera
+                        $params['flags'][] = [
+                            'type' => $flag['type'],
+                            'label' => $flag['display_text']
+                        ];
+                    }
                 }
             }
         }
@@ -368,6 +448,12 @@ class CustomFlags extends Module
         $validFlagTypes = ['online-only', 'on-sale', 'discount', 'new', 'pack', 'out_of_stock'];
         $type = Tools::getValue('flag_type');
 
+        $triggerType = Tools::getValue('flag_trigger_type');
+        $triggerOperator = Tools::getValue('flag_trigger_operator');
+        $triggerValue = Tools::getValue('flag_trigger_value');
+        $triggerTypes = ['none', 'quantity'];
+        $triggerOperators = [ '>', '<'];
+
         // Sprawdzanie poprawności danych flagi
         if (empty($flagName)) {
             $output = $this->displayError($this->l('Flag name cannot be empty.'));
@@ -377,11 +463,20 @@ class CustomFlags extends Module
             $output = $this->displayError($this->l('Flag displayed text cannot be empty.'));
         } else if (empty($type) || !in_array($type, $validFlagTypes)) {
             $output = $this->displayError($this->l('Invalid flag type.'));
+        } else if ( !empty($triggerType) && !in_array($triggerType, $triggerTypes)) {
+            $output = $this->displayError($this->l('Invalid trigger type.'));
+        } else if ( $triggerType !== 'none' && !empty($triggerOperator) && !in_array($triggerOperator, $triggerOperators)) {
+            $output = $this->displayError($this->l('Invalid trigger operator.'));
+        } else if ( $triggerType !== 'none' && (empty($triggerValue) || !is_numeric($triggerValue)) ) {
+            $output = $this->displayError($this->l('Invalid trigger value.'));
         } else {
             Db::getInstance()->insert('custom_flags', [
                 'name' => pSQL($flagName),
                 'display_text' => pSQL($displayText),
                 'type' => pSQL($type),
+                'trigger_type' => pSQL($triggerType),
+                'trigger_operator' => ($triggerType !== 'none')?pSQL($triggerOperator, true):'',
+                'trigger_value' => ($triggerType !== 'none')?(int)$triggerValue:'',
             ]);
             $output = $this->displayConfirmation($this->l('Flag added successfully.'));
         }
@@ -402,6 +497,12 @@ class CustomFlags extends Module
         $validFlagTypes = ['online-only', 'on-sale', 'discount', 'new', 'pack', 'out_of_stock'];
         $type = Tools::getValue('edit_flag_type');
 
+        $triggerType = Tools::getValue('edit_flag_trigger_type');
+        $triggerOperator = Tools::getValue('edit_flag_trigger_operator');
+        $triggerValue = Tools::getValue('edit_flag_trigger_value');
+        $triggerTypes = ['none', 'quantity'];
+        $triggerOperators = [ '>', '<'];
+
         // Sprawdzanie poprawności danych flagi
         if (empty($flagName)) {
             $output = $this->displayError($this->l('Flag name cannot be empty.'));
@@ -411,11 +512,20 @@ class CustomFlags extends Module
             $output = $this->displayError($this->l('Flag displayed text cannot be empty.'));
         } else if (empty($type) || !in_array($type, $validFlagTypes)) {
             $output = $this->displayError($this->l('Invalid flag type.'));
+        } else if ( !empty($triggerType) && !in_array($triggerType, $triggerTypes)) {
+            $output = $this->displayError($this->l('Invalid trigger type.'));
+        } else if ( $triggerType !== 'none' && !empty($triggerOperator) && !in_array($triggerOperator, $triggerOperators)) {
+            $output = $this->displayError($this->l('Invalid trigger operator.'));
+        } else if ( $triggerType !== 'none' && (empty($triggerValue) || !is_numeric($triggerValue)) ) {
+            $output = $this->displayError($this->l('Invalid trigger value.'));
         } else {
             Db::getInstance()->update('custom_flags', [
                 'name' => pSQL($flagName),
                 'display_text' => pSQL($displayText),
                 'type' => pSQL($type),
+                'trigger_type' => pSQL($triggerType),
+                'trigger_operator' => ($triggerType !== 'none')?pSQL($triggerOperator, true):'',
+                'trigger_value' => ($triggerType !== 'none')?(int)$triggerValue:'',
             ], 'flag_id = ' . (int)$flagId);
             return $this->displayConfirmation($this->l('Flag updated successfully.'));
         }

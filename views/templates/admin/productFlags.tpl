@@ -8,6 +8,7 @@
         <th>Name</th>
         <th>Displayed flag text</th>
         <th>Type</th>
+        <th>Trigger</th>
       </tr>
       </thead>
       <tbody>
@@ -30,6 +31,14 @@
           </th>
           <th>
             <span>{$flag.type}</span>
+          </th>
+          <th>
+            <span>
+                {if $flag.trigger_type != 'none'}
+                    {$flag.trigger_type}&nbsp{$flag.trigger_operator}&nbsp{$flag.trigger_value}
+                {/if}
+            </span>
+          </th>
           </th>
         </tr>
       {/foreach}
