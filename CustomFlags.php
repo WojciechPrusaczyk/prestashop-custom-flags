@@ -103,7 +103,13 @@ class CustomFlags extends Module
             $output .= $this->deleteFlag();
         }
 
-        return $output . $this->displayForm();
+        // Stworzenie listy flag na końcu strony konfiguracji
+        $this->context->smarty->assign([
+            'flags' => $this->getFlags(),
+        ]);
+        $output .= $this->context->smarty->fetch($this->local_path . 'views\templates\admin\flagsList.tpl');
+
+        return $this->displayForm() . $output;
     }
 
     /**
@@ -452,7 +458,7 @@ class CustomFlags extends Module
         $triggerOperator = Tools::getValue('flag_trigger_operator');
         $triggerValue = Tools::getValue('flag_trigger_value');
         $triggerTypes = ['none', 'quantity'];
-        $triggerOperators = [ '>', '<'];
+        $triggerOperators = ['>', '<'];
 
         // Sprawdzanie poprawności danych flagi
         if (empty($flagName)) {
@@ -463,11 +469,11 @@ class CustomFlags extends Module
             $output = $this->displayError($this->l('Flag displayed text cannot be empty.'));
         } else if (empty($type) || !in_array($type, $validFlagTypes)) {
             $output = $this->displayError($this->l('Invalid flag type.'));
-        } else if ( !empty($triggerType) && !in_array($triggerType, $triggerTypes)) {
+        } else if (!empty($triggerType) && !in_array($triggerType, $triggerTypes)) {
             $output = $this->displayError($this->l('Invalid trigger type.'));
-        } else if ( $triggerType !== 'none' && !empty($triggerOperator) && !in_array($triggerOperator, $triggerOperators)) {
+        } else if ($triggerType !== 'none' && !empty($triggerOperator) && !in_array($triggerOperator, $triggerOperators)) {
             $output = $this->displayError($this->l('Invalid trigger operator.'));
-        } else if ( $triggerType !== 'none' && (empty($triggerValue) || !is_numeric($triggerValue)) ) {
+        } else if ($triggerType !== 'none' && (empty($triggerValue) || !is_numeric($triggerValue))) {
             $output = $this->displayError($this->l('Invalid trigger value.'));
         } else {
             Db::getInstance()->insert('custom_flags', [
@@ -475,8 +481,8 @@ class CustomFlags extends Module
                 'display_text' => pSQL($displayText),
                 'type' => pSQL($type),
                 'trigger_type' => pSQL($triggerType),
-                'trigger_operator' => ($triggerType !== 'none')?pSQL($triggerOperator, true):'',
-                'trigger_value' => ($triggerType !== 'none')?(int)$triggerValue:'',
+                'trigger_operator' => ($triggerType !== 'none') ? pSQL($triggerOperator, true) : '',
+                'trigger_value' => ($triggerType !== 'none') ? (int)$triggerValue : '',
             ]);
             $output = $this->displayConfirmation($this->l('Flag added successfully.'));
         }
@@ -501,7 +507,7 @@ class CustomFlags extends Module
         $triggerOperator = Tools::getValue('edit_flag_trigger_operator');
         $triggerValue = Tools::getValue('edit_flag_trigger_value');
         $triggerTypes = ['none', 'quantity'];
-        $triggerOperators = [ '>', '<'];
+        $triggerOperators = ['>', '<'];
 
         // Sprawdzanie poprawności danych flagi
         if (empty($flagName)) {
@@ -512,11 +518,11 @@ class CustomFlags extends Module
             $output = $this->displayError($this->l('Flag displayed text cannot be empty.'));
         } else if (empty($type) || !in_array($type, $validFlagTypes)) {
             $output = $this->displayError($this->l('Invalid flag type.'));
-        } else if ( !empty($triggerType) && !in_array($triggerType, $triggerTypes)) {
+        } else if (!empty($triggerType) && !in_array($triggerType, $triggerTypes)) {
             $output = $this->displayError($this->l('Invalid trigger type.'));
-        } else if ( $triggerType !== 'none' && !empty($triggerOperator) && !in_array($triggerOperator, $triggerOperators)) {
+        } else if ($triggerType !== 'none' && !empty($triggerOperator) && !in_array($triggerOperator, $triggerOperators)) {
             $output = $this->displayError($this->l('Invalid trigger operator.'));
-        } else if ( $triggerType !== 'none' && (empty($triggerValue) || !is_numeric($triggerValue)) ) {
+        } else if ($triggerType !== 'none' && (empty($triggerValue) || !is_numeric($triggerValue))) {
             $output = $this->displayError($this->l('Invalid trigger value.'));
         } else {
             Db::getInstance()->update('custom_flags', [
@@ -524,8 +530,8 @@ class CustomFlags extends Module
                 'display_text' => pSQL($displayText),
                 'type' => pSQL($type),
                 'trigger_type' => pSQL($triggerType),
-                'trigger_operator' => ($triggerType !== 'none')?pSQL($triggerOperator, true):'',
-                'trigger_value' => ($triggerType !== 'none')?(int)$triggerValue:'',
+                'trigger_operator' => ($triggerType !== 'none') ? pSQL($triggerOperator, true) : '',
+                'trigger_value' => ($triggerType !== 'none') ? (int)$triggerValue : '',
             ], 'flag_id = ' . (int)$flagId);
             return $this->displayConfirmation($this->l('Flag updated successfully.'));
         }
