@@ -109,7 +109,7 @@ class CustomFlags extends Module
         ]);
         $output .= $this->context->smarty->fetch($this->local_path . 'views\templates\admin\flagsList.tpl');
 
-        return $this->displayForm() . $output;
+        return $output.$this->displayForm();
     }
 
     /**
